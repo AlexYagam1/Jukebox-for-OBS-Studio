@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OBS Jukebox Widget (YouTube/YouTube Music)</title>
+  <style>
+    :root{
+      --fg: #f5f7fb;
+      --fg-dim: #c9cfdd;
+      --accent: #7aa2ff;
+      --progress-bg: rgba(255,255,255,0.2);
+      --progress-fg: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: system-ui, sans-serif;
+      color: var(--fg);
+    }
+    .jukebox {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-width: 400px;
+      min-height: 150px; /* altura mínima */
+      overflow: hidden;
+      border-radius: 14px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+      isolation: isolate;
+    }
+    /* Fundo em degradê */
+    .bg-layer {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, #222, #444);
+      filter: blur(60px);
+      transition: background 1s ease;
+      z-index: 0;
+    }
+    .shade {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 1;
+    }
+    .content {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      gap: 10px;
+    }
+    .art {
+      height: 80%;
+      aspect-ratio: 1/1;
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.06);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+    }
+    .art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .texts {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .title-container {
+      position: relative;
+      width: 100%;
+      height: 1.8em;
+      overflow: hidden;
+    }
+    .title {
+      position: absolute;
+      font-weight: 800;
+      font-size: 23px;
+      white-space: nowrap;
+      transition: transform 0.5s ease;
+      transform: translateX(0);
+    }
+    .title.scrolling {
+      animation: scrollText 10s infinite linear;
+    }
+    @keyframes scrollText {
+      0% {
+        transform: translateX(0);
+      }
+      10% {
+        transform: translateX(0);
+      }
+      90% {
+        transform: translateX(calc(-100% + var(--container-width)));
+      }
+      100% {
+        transform: translateX(calc(-100% + var(--container-width)));
+      }
+    }
+    .author {
+      font-size: 23px;
+      color: var(--fg-dim);
+      opacity: 0.95;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .icons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+    }
+    .icon {
+      width: 35px;
+      height: 35px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.12);
+      cursor: pointer;
+    }
+    .icon:hover { background: rgba(255,255,255,0.25); }
+    .progress-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .time {
+      font-variant-numeric: tabular-nums;
+      font-size: 13px;
+      color: var(--fg-dim);
+      min-width: 52px;
+      text-align: center;
+    }
+    .bar {
+      flex: 1;
+      position: relative;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--progress-bg);
+    }
+    .bar-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 6px;
+      width: 0%;
+      border-radius: 999px;
+      background: var(--progress-fg);
+      transition: width 250ms linear;
+    }
+    .bar-dot {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--progress-fg);
+      box-shadow: 0 0 16px rgba(255,255,255,0.6);
+    }
+    .input-strip {
+      position: absolute;
+      left: 8px; right: 8px; top: 0;
+      display: flex;
+      gap: 8px;
+      z-index: 3;
+      align-items: center;
+      background: rgba(0,0,0,0.45);
+      padding: 6px 8px;
+      border-radius: 0 0 10px 10px;
+      backdrop-filter: blur(6px);
+      transform: translateY(-100%);
+      transition: transform 0.3s ease;
+    }
+    .jukebox:hover .input-strip {
+      transform: translateY(0); /* aparece ao passar mouse */
+    }
+    .input-strip input[type="text"]{
+      flex: 1;
+      height: 28px;
+      border: 0;
+      outline: none;
+      border-radius: 8px;
+      padding: 0 8px;
+      color: var(--fg);
+      background: rgba(255,255,255,0.08);
+    }
+    .btn {
+      height: 28px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #player { position: absolute; width: 0; height: 0; opacity: 0; }
+  </style>
+</head>
+<body>
+  <div class="jukebox" id="jukebox">
+    <div class="bg-layer" id="bg"></div>
+    <div class="shade"></div>
+
+    <div class="input-strip" id="inputStrip">
+      <input id="playlistUrl" type="text" placeholder="Cole o link da playlist ou vídeo do YouTube..." />
+      <button class="btn" id="loadBtn">Carregar</button>
+    </div>
+
+    <div class="content">
+      <div class="art"><img id="thumb" alt="Thumb" /></div>
+      <div class="texts">
+        <div class="title-container">
+          <div id="title" class="title"></div>
+        </div>
+        <div id="author" class="author"></div>
+        <div class="progress-row">
+          <div id="elapsed" class="time">0:00</div>
+          <div class="bar">
+            <div id="barFill" class="bar-fill"></div>
+            <div id="barDot" class="bar-dot"></div>
+          </div>
+          <div id="total" class="time">0:00</div>
+        </div>
+      </div>
+      <div class="icons">
+        <div id="btnPause" class="icon" title="Play/Pause">
+          <!-- Ícone muda dinamicamente -->
+          <svg id="pauseIcon" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>
+        </div>
+        <div id="btnNext" class="icon" title="Próxima faixa">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 6l8.5 6L7 18V6zm9 0h2v12h-2z"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="player"></div>
+
+  <script>
+    // YouTube API
+    var tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    let player, lastVideoId = null, updateTimer, playing = true;
+    let previousVideoId = null; // Armazena o ID do vídeo anterior
+
+    function $(id){ return document.getElementById(id); }
+    function formatTime(s){
+      s = Math.max(0, Math.floor(s||0));
+      return Math.floor(s/60)+":"+(s%60).toString().padStart(2,'0');
+    }
+    function setProgress(cur,dur){
+      $('elapsed').textContent = formatTime(cur);
+      $('total').textContent = formatTime(dur);
+      let pct = dur>0? (cur/dur)*100 : 0;
+      $('barFill').style.width = pct+"%";
+      $('barDot').style.left = pct+"%";
+    }
+    function setArt(vid){
+      let url = `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
+      $('thumb').src = url;
+      // extrair cores dominantes simples (média de tons vermelho e azul opostos)
+      let c1 = "#"+((vid.charCodeAt(0)*123456)%0xFFFFFF).toString(16).padStart(6,"0");
+      let c2 = "#"+((vid.charCodeAt(3)*654321)%0xFFFFFF).toString(16).padStart(6,"0");
+      $('bg').style.background = `linear-gradient(90deg, ${c1}, ${c2})`;
+    }
+    function setTexts(title, author){
+      const titleElement = $('title');
+      const titleContainer = titleElement.parentElement;
+      
+      titleElement.textContent = title||"—";
+      $('author').textContent = author||"";
+      
+      // Resetar animação
+      titleElement.classList.remove('scrolling');
+      titleElement.style.transform = 'translateX(0)';
+      
+      // Usar setTimeout para garantir que o DOM foi atualizado
+      setTimeout(() => {
+        const containerWidth = titleContainer.offsetWidth;
+        const titleWidth = titleElement.scrollWidth;
+        
+        titleElement.style.setProperty('--container-width', `${containerWidth}px`);
+        
+        if (titleWidth > containerWidth) {
+          // Adicionar um pequeno delay antes de iniciar a animação
+          setTimeout(() => {
+            titleElement.classList.add('scrolling');
+          }, 1000);
+        }
+      }, 100);
+    }
+    function updateNowPlaying(){
+      let data = player.getVideoData();
+      if(data && data.video_id !== lastVideoId){
+        previousVideoId = lastVideoId; // Armazena o vídeo anterior
+        lastVideoId = data.video_id;
+        setArt(data.video_id);
+        setTexts(data.title,data.author);
+      }
+    }
+
+    // Função para embaralhar array (Fisher-Yates)
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    window.onYouTubeIframeAPIReady = ()=>{
+      player = new YT.Player('player',{
+        height:'0',width:'0',
+        playerVars:{
+          autoplay:1,
+          controls:0,
+          disablekb:1,
+          fs:0,
+          rel:0,
+          modestbranding:1,
+          iv_load_policy:3,
+          playsinline:1
+        },
+        events:{
+          onReady: onReady,
+          onStateChange: onStateChange
+        }
+      });
+    };
+
+    function onReady(){
+      let saved=localStorage.getItem("jukebox.playlist");
+      if(saved){$('playlistUrl').value=saved;loadFromInput();}
+    }
+
+    function onStateChange(e){
+      if(e.data === YT.PlayerState.PLAYING){
+        tick();
+      }
+      if(e.data === YT.PlayerState.PLAYING || e.data === YT.PlayerState.CUED){
+        updateNowPlaying();
+      }
+      // Quando uma música terminar, tocar a próxima automaticamente
+      if(e.data === YT.PlayerState.ENDED){
+        playNextRandomVideo();
+      }
+    }
+
+    function tick(){
+      if(updateTimer) cancelAnimationFrame(updateTimer);
+      const step=()=>{
+        try{setProgress(player.getCurrentTime(),player.getDuration());updateNowPlaying();}catch{}
+        updateTimer=requestAnimationFrame(step);
+      };step();
+    }
+
+    function extractListId(input){
+      if(!input) return null;
+      try{
+        let u=new URL(input);
+        let list=u.searchParams.get("list");
+        if(list) return list;
+        
+        let v=u.searchParams.get("v");
+        if(v) return {single:v};
+        
+        if(u.hostname.includes("youtu.be")){
+          let id=u.pathname.split("/").filter(Boolean)[0];
+          if(id) return {single:id};
+        }
+      }catch{
+        if(/^[\w-]{11}$/.test(input)) return {single:input};
+      }
+      return null;
+    }
+
+    // Função para tocar um vídeo aleatório da playlist
+    function playNextRandomVideo() {
+      if (!player || !player.getPlaylist) return;
+      
+      try {
+        const playlist = player.getPlaylist();
+        if (!playlist || playlist.length === 0) return;
+        
+        // Filtra a playlist removendo o vídeo anterior (se existir)
+        const availableVideos = playlist.filter(id => id !== previousVideoId);
+        
+        // Se não houver vídeos disponíveis (todos já foram tocados), reseta
+        if (availableVideos.length === 0) {
+          player.playVideoAt(Math.floor(Math.random() * playlist.length));
+          return;
+        }
+        
+        // Escolhe um vídeo aleatório da lista filtrada
+        const randomIndex = Math.floor(Math.random() * availableVideos.length);
+        player.playVideoAt(playlist.indexOf(availableVideos[randomIndex]));
+      } catch(e) {
+        console.error("Erro ao tocar próxima música aleatória:", e);
+      }
+    }
+
+    function loadFromInput(){
+      let raw=$('playlistUrl').value.trim();
+      if(!raw) return;
+      localStorage.setItem("jukebox.playlist",raw);
+      let parsed=extractListId(raw); 
+      lastVideoId=null;
+      previousVideoId = null;
+      
+      if(!parsed){
+        alert("Link inválido");
+        return;
+      }
+      
+      if(typeof parsed==="string"){
+        // Carrega a playlist em modo aleatório
+        player.loadPlaylist({
+          listType: "playlist",
+          list: parsed,
+          index: 0,
+          shuffle: true // Ativa o modo aleatório
+        });
+      } else if(parsed.single){
+        player.loadVideoById({videoId:parsed.single});
+      }
+    }
+
+    $('loadBtn').onclick=loadFromInput;
+    $('playlistUrl').onkeydown=e=>{if(e.key==="Enter")loadFromInput();};
+
+    // Botão pause/play
+    $('btnPause').onclick=()=>{
+      if(playing){
+        player.pauseVideo();
+        playing=false; 
+        $('pauseIcon').outerHTML='<svg id="pauseIcon" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
+      } else {
+        player.playVideo();
+        playing=true; 
+        $('pauseIcon').outerHTML='<svg id="pauseIcon" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 4h4v16H6zm8 0h4v16h-4z"/></svg>';
+      }
+    };
+
+    // Botão próxima música
+    $('btnNext').onclick=()=>{
+      try {
+        playNextRandomVideo();
+      } catch(e) {
+        console.error("Erro ao avançar para próxima música:", e);
+      }
+    };
+  </script>
+</body>
+</html>
